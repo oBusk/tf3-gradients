@@ -1,0 +1,15 @@
+{
+    "name": "Gradient Data Layer",
+    "summary": "Adds a data layer that colors tracks by gradient, so steep sections are easy to spot.",
+    "description": "Adds a data layer that colors built tracks by their gradient, making it easy to find sections that are too steep for your trains and may need to be replanned.",
+    "authors": [
+        {
+            "name": "nullDozzer",
+            "role": "CREATOR"
+        }
+    ],
+    "tags": [
+        "Script Mod"
+    ],
+    "url": ""
+}
