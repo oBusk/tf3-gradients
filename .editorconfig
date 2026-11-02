@@ -1,0 +1,19 @@
+root = true
+
+# TF3 requires text resources (.lua, .tl, .json, ...) to be UTF-8 without BOM.
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Matches the base game's script style.
+[*.{lua,tl}]
+indent_style = tab
+
+[*.json]
+indent_style = space
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false
