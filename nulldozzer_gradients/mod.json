@@ -4,8 +4,5 @@
     "severityAdd": "None",
     "severityRemove": "None",
     "visible": true,
-    "cosmetic": true,
-    "postRunScript": {
-        "fileName": "nulldozzer_gradients::/mod.script@postRunFn"
-    }
+    "cosmetic": true
 }

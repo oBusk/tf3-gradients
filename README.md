@@ -7,7 +7,7 @@ Planned:
 - A gradient data layer for tracks.
 - The steepest gradient of a line, shown in the line info.
 
-**Status:** prototype. A button next to the Data Layers button greys out the map and colors every track piece by its steepest gradient.
+**Status:** prototype. A button next to the Data Layers button greys out the map, colors every track and road segment by its steepest gradient (green → yellow → red → black; tracks up to 9%, roads up to 20%), and shows gradients in a tooltip.
 
 ## Repository layout
 
@@ -15,10 +15,16 @@ Planned:
 nulldozzer_gradients/       The mod itself (this folder is what the game loads)
   mod.json                   Technical definition: mod id, revision, scripts
   _metadata/modinfo.json     Name, description, tags shown in the Mod Hub
-  content/mod.script.tl      Mod script functions (Teal)
   content/gui/nulldozzer_gradients/
     gradient_layer.res.lua   Registers the button in the game's mod button area
-    gradient_layer.script.tl Button, window and track coloring
+    gradient_layer.script.tl Button, tool window, legend and coloring
+    gradient_layer.css.lua   Window position
+    gradient_tooltip.tl      Hover tooltip
+    network_scan.tl          Finds track and road segments
+    edge_profile.tl          Measures gradients along a segment
+    gradient_scale.tl        Gradient to color
+    point_grid.tl            Spatial lookup for the tooltip
+    *.d.tl                   Teal type definitions for the modules
 tlconfig.lua, all_def.tl     Teal type-checking config for the editor
 ```
 
@@ -34,7 +40,9 @@ New-Item -ItemType Junction `
   -Target "<path-to-this-repo>\nulldozzer_gradients"
 ```
 
-Then start the game, enable **Gradient Data Layer** in the mod selection when starting or loading a game, and open the console (the key below <kbd>Esc</kbd>). It should show `[nulldozzer_gradients] loaded`.
+Then start the game and enable **Gradient Data Layer** in the mod selection when starting or loading a game. Its button appears to the right of the Data Layers button.
+
+After editing scripts, exit to the main menu and load the save again. Edits to already loaded GUI scripts also apply with <kbd>AltGr</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> (debug mode); new files need the reload. The game log is `userdata/<steam-id>/3493540/local/crash_dump/stdout.txt`.
 
 Turning on debug mode in the game's advanced settings enables extra tools for testing, such as the debug window (<kbd>AltGr</kbd>+<kbd>D</kbd>).
 
