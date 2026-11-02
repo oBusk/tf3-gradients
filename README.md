@@ -7,7 +7,7 @@ Planned:
 - A gradient data layer for tracks.
 - The steepest gradient of a line, shown in the line info.
 
-**Status:** skeleton only. The mod loads and writes a line to the in-game console, but has no features yet.
+**Status:** prototype. A button next to the Data Layers button greys out the map and colors every track piece by its steepest gradient.
 
 ## Repository layout
 
@@ -16,6 +16,9 @@ nulldozzer_gradients/       The mod itself (this folder is what the game loads)
   mod.json                   Technical definition: mod id, revision, scripts
   _metadata/modinfo.json     Name, description, tags shown in the Mod Hub
   content/mod.script.tl      Mod script functions (Teal)
+  content/gui/nulldozzer_gradients/
+    gradient_layer.res.lua   Registers the button in the game's mod button area
+    gradient_layer.script.tl Button, window and track coloring
 tlconfig.lua, all_def.tl     Teal type-checking config for the editor
 ```
 
