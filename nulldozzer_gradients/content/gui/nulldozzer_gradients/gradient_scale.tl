@@ -1,32 +1,66 @@
 local gradient_scale : NullDozzerGradientScale = {}
 
 local type Scale = NullDozzerGradientScale.Scale
+local type Kind = NullDozzerNetworkScan.Kind
 
 local GREEN <const> = { 0.20, 0.75, 0.25 }
 local YELLOW <const> = { 1.00, 0.85, 0.10 }
 local RED <const> = { 0.90, 0.15, 0.10 }
 local BLACK <const> = { 0.05, 0.05, 0.05 }
 
-local SCALES : {NullDozzerNetworkScan.Kind : Scale} = {
-	track = {
-		stops = {
-			{ gradient = 0.00, color = GREEN },
-			{ gradient = 0.02, color = YELLOW },
-			{ gradient = 0.04, color = RED },
-			{ gradient = 0.09, color = BLACK },
-		},
-		legendGradients = { 0.00, 0.03, 0.06, 0.09 },
-	},
-	road = {
-		stops = {
-			{ gradient = 0.00, color = GREEN },
-			{ gradient = 0.05, color = YELLOW },
-			{ gradient = 0.10, color = RED },
-			{ gradient = 0.20, color = BLACK },
-		},
-		legendGradients = { 0.00, 0.05, 0.10, 0.15, 0.20 },
-	},
+-- Each colour sits at a fraction of the steepest gradient the player may build,
+-- so black always means "at the limit", whatever the limit is.
+local STOPS : {{number, {number}}} = {
+	{ 0.0, GREEN },
+	{ 1.0 / 3.0, YELLOW },
+	{ 2.0 / 3.0, RED },
+	{ 1.0, BLACK },
 }
+
+-- Used only if no buildable template of that kind reports a limit.
+-- 8.5% is the vanilla track maxSlopeBuild (base/content/infrastructure/track.zip).
+local FALLBACK_MAX : {Kind : number} = {
+	track = 0.085,
+	road = 0.15,
+}
+
+local ROAD_TYPES : {Kind : RoadType} = {
+	track = api.type["enum"].RoadType.TRACK,
+	road = api.type["enum"].RoadType.STREET,
+}
+
+local scales : {Kind : Scale} = {}
+
+-- Steepest maxSlopeBuild among the templates the build menu offers (getAll() skips
+-- hidden ones such as depot tracks). Mods that change the limit, e.g. Realistic
+-- Track Gradients, edit these templates, so the scale follows them.
+local function buildLimit(kind : Kind) : number
+	local rep = api.res.streetTemplateRep
+	local steepest = 0.0
+	for id, _ in pairs(rep.getAll()) do
+		local template = rep.get(id)
+		if template.roadType == ROAD_TYPES[kind] and template.maxSlopeBuild ~= nil then
+			steepest = math.max(steepest, template.maxSlopeBuild)
+		end
+	end
+	if steepest <= 0.0 then
+		log.message("[nulldozzer_gradients] no " .. kind .. " build limit found, using fallback")
+		return FALLBACK_MAX[kind]
+	end
+	log.message("[nulldozzer_gradients] " .. kind .. " build limit: " .. api.util.toStringPercentPrecision(steepest, 1))
+	return steepest
+end
+
+local function makeScale(kind : Kind) : Scale
+	local maxGradient = buildLimit(kind)
+	local scale : Scale = { maxGradient = maxGradient, stops = {}, legendGradients = {} }
+	for _, stop in ipairs(STOPS) do
+		local gradient = stop[1] * maxGradient
+		scale.stops[#scale.stops + 1] = { gradient = gradient, color = stop[2] }
+		scale.legendGradients[#scale.legendGradients + 1] = gradient
+	end
+	return scale
+end
 
 local function mix(a : number, b : number, t : number) : number
 	return a + (b - a) * t
@@ -52,8 +86,11 @@ local function rgbAt(scale : Scale, gradient : number) : {number}
 	return stops[#stops].color
 end
 
-function gradient_scale.forKind(kind : NullDozzerNetworkScan.Kind) : Scale
-	return SCALES[kind]
+function gradient_scale.forKind(kind : Kind) : Scale
+	if scales[kind] == nil then
+		scales[kind] = makeScale(kind)
+	end
+	return scales[kind]
 end
 
 function gradient_scale.colorFor(scale : Scale, gradient : number, opacity : number) : Vec4f

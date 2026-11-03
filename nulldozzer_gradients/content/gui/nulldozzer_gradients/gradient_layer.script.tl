@@ -95,7 +95,7 @@ local LegendLabels = react.RegisterRecipe("NullDozzerGradientLegendLabels", func
 		if i > 1 then
 			children[#children + 1] = builtin.Component{ meta = { class = "nulldozzer-legend-spacer" } }
 		end
-		children[#children + 1] = builtin.TextView{ meta = { class = "font-scale-annotation" }, text = api.util.toStringPercent(gradient) }
+		children[#children + 1] = builtin.TextView{ meta = { class = "font-scale-annotation" }, text = api.util.toStringPercentPrecision(gradient, 1) }
 	end
 	return builtin.BoxLayout{
 		orientation = builtin.type.Orientation.Horizontal,
