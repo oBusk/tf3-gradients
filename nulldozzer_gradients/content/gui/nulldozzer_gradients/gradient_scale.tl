@@ -18,10 +18,11 @@ local STOPS : {{number, {number}}} = {
 }
 
 -- Used only if no buildable template of that kind reports a limit.
--- 8.5% is the vanilla track maxSlopeBuild (base/content/infrastructure/track.zip).
+-- Vanilla values: tracks set 8.5% (base/content/infrastructure/track.zip); roads
+-- set nothing and get the engine default, which the game reports as 20%.
 local FALLBACK_MAX : {Kind : number} = {
 	track = 0.085,
-	road = 0.15,
+	road = 0.20,
 }
 
 local ROAD_TYPES : {Kind : RoadType} = {
@@ -31,23 +32,35 @@ local ROAD_TYPES : {Kind : RoadType} = {
 
 local scales : {Kind : Scale} = {}
 
--- Steepest maxSlopeBuild among the templates the build menu offers (getAll() skips
--- hidden ones such as depot tracks). Mods that change the limit, e.g. Realistic
--- Track Gradients, edit these templates, so the scale follows them.
+-- The base game marks templates the player can never build (depot and industry
+-- tracks, 12.5% limit) with availability.yearFrom = 100000.
+local NEVER_AVAILABLE_YEAR <const> = 100000
+
+local function isPlayerBuildable(template : StreetTemplate) : boolean
+	local availability = template.availability
+	return availability == nil or availability.yearFrom < NEVER_AVAILABLE_YEAR
+end
+
+-- Steepest maxSlopeBuild among templates the player can build. Mods that change
+-- the limit, e.g. Realistic Track Gradients, edit these templates, so the scale
+-- follows them.
 local function buildLimit(kind : Kind) : number
 	local rep = api.res.streetTemplateRep
 	local steepest = 0.0
-	for id, _ in pairs(rep.getAll()) do
+	local steepestName = ""
+	for id, name in pairs(rep.getAll()) do
 		local template = rep.get(id)
-		if template.roadType == ROAD_TYPES[kind] and template.maxSlopeBuild ~= nil then
-			steepest = math.max(steepest, template.maxSlopeBuild)
+		if template.roadType == ROAD_TYPES[kind] and isPlayerBuildable(template)
+			and template.maxSlopeBuild ~= nil and template.maxSlopeBuild > steepest then
+			steepest = template.maxSlopeBuild
+			steepestName = name
 		end
 	end
 	if steepest <= 0.0 then
 		log.message("[nulldozzer_gradients] no " .. kind .. " build limit found, using fallback")
 		return FALLBACK_MAX[kind]
 	end
-	log.message("[nulldozzer_gradients] " .. kind .. " build limit: " .. api.util.toStringPercentPrecision(steepest, 1))
+	log.message("[nulldozzer_gradients] " .. kind .. " build limit: " .. api.util.toStringPercentPrecision(steepest, 1) .. " (" .. steepestName .. ")")
 	return steepest
 end
 
