@@ -40,10 +40,40 @@ local record LayerState
 	strips : {Strip}
 end
 
+-- One colour per 4 m sample, in order along the piece. Unverified: assumes the
+-- engine spreads the colour list evenly along the strip (the base game only
+-- ever passes two). A single sample is doubled so the list has a start and end.
+local function distanceSquared(position : Vec3f, sample : NullDozzerEdgeProfile.Sample) : number
+	local dx = position.x - sample.x
+	local dy = position.y - sample.y
+	return dx * dx + dy * dy
+end
+
+-- Samples are measured along the piece's first lane; a road lane running the other
+-- way starts at the last sample, so its colours must be reversed.
+local function runsBackwards(lane : EdgeGeometry, samples : {NullDozzerEdgeProfile.Sample}) : boolean
+	local start = api.engine.util.transport.calcPosition(lane, 0.0)
+	return distanceSquared(start, samples[#samples]) < distanceSquared(start, samples[1])
+end
+
+local function sampleColors(lane : EdgeGeometry, piece : Piece) : {Vec4f}
+	local scale = gradient_scale.forKind(piece.kind)
+	local samples = piece.profile.samples
+	local backwards = runsBackwards(lane, samples)
+	local colors : {Vec4f} = {}
+	for i = 1, #samples do
+		local sample = backwards and samples[#samples + 1 - i] or samples[i]
+		colors[i] = gradient_scale.colorFor(scale, sample.gradient, STRIP_OPACITY)
+	end
+	if #colors == 1 then
+		colors[2] = colors[1]
+	end
+	return colors
+end
+
 local function makeStrip(lane : EdgeGeometry, piece : Piece) : Strip
-	local color = gradient_scale.colorFor(gradient_scale.forKind(piece.kind), piece.profile.maxGradient, STRIP_OPACITY)
 	local strip = builtin.type.EdgeRenderable.Edge.new(lane)
-	strip.colors = { color, color }
+	strip.colors = sampleColors(lane, piece)
 	strip.width = STRIP_WIDTH[piece.kind]
 	strip.offsetZ = STRIP_OFFSET_Z
 	strip.stepSize = STRIP_STEP
