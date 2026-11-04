@@ -1,6 +1,7 @@
 local app_util = ug_require "::/scripts/app_util.tl" as AppUtil
 local react = ug_require "::/gui/main/react.lua" as React
 local builtin = ug_require "::/gui/main/builtin.lua" as Builtin
+local engine_react_util = ug_require "::/gui/main/engine_react_util.tl" as EngineReactUtil
 local game_react_globals = ug_require "::/gui/main/game_react_globals.tl" as GameReactGlobals
 local layer_react_util = ug_require "::/gui/layers/layer_react_util.tl" as LayerReactUtil
 local main_mod_button_area = ug_require "::/gui/main/main_mod_button_area.tl" as MainModButtonArea
@@ -37,7 +38,10 @@ local layerColors = api.gui.genericRep.get(api.gui.genericRep.find("::/gui/layer
 local record LayerState
 	piecesByEntity : {Engine.Entity : Piece}
 	grid : NullDozzerPointGrid.Grid
-	strips : {Strip}
+	-- One colour per piece from its average gradient.
+	segmentStrips : {Strip}
+	-- One colour per 4 m stretch, shown while the detail modifier is held.
+	detailStrips : {Strip}
 end
 
 -- One colour per 4 m sample, in order along the piece. Unverified: assumes the
@@ -56,7 +60,7 @@ local function runsBackwards(lane : EdgeGeometry, samples : {NullDozzerEdgeProfi
 	return distanceSquared(start, samples[#samples]) < distanceSquared(start, samples[1])
 end
 
-local function sampleColors(lane : EdgeGeometry, piece : Piece) : {Vec4f}
+local function detailColors(lane : EdgeGeometry, piece : Piece) : {Vec4f}
 	local scale = gradient_scale.forKind(piece.kind)
 	local samples = piece.profile.samples
 	local backwards = runsBackwards(lane, samples)
@@ -71,9 +75,14 @@ local function sampleColors(lane : EdgeGeometry, piece : Piece) : {Vec4f}
 	return colors
 end
 
-local function makeStrip(lane : EdgeGeometry, piece : Piece) : Strip
+local function segmentColors(piece : Piece) : {Vec4f}
+	local color = gradient_scale.colorFor(gradient_scale.forKind(piece.kind), piece.profile.averageGradient, STRIP_OPACITY)
+	return { color, color }
+end
+
+local function makeStrip(lane : EdgeGeometry, piece : Piece, colors : {Vec4f}) : Strip
 	local strip = builtin.type.EdgeRenderable.Edge.new(lane)
-	strip.colors = sampleColors(lane, piece)
+	strip.colors = colors
 	strip.width = STRIP_WIDTH[piece.kind]
 	strip.offsetZ = STRIP_OFFSET_Z
 	strip.stepSize = STRIP_STEP
@@ -87,12 +96,13 @@ local function addToGrid(grid : NullDozzerPointGrid.Grid, piece : Piece)
 end
 
 local function buildLayerState() : LayerState
-	local state : LayerState = { piecesByEntity = {}, grid = point_grid.new(GRID_CELL_SIZE), strips = {} }
+	local state : LayerState = { piecesByEntity = {}, grid = point_grid.new(GRID_CELL_SIZE), segmentStrips = {}, detailStrips = {} }
 	for _, piece in ipairs(network_scan.scanAll()) do
 		state.piecesByEntity[piece.entity] = piece
 		addToGrid(state.grid, piece)
 		for _, lane in ipairs(piece.lanes) do
-			state.strips[#state.strips + 1] = makeStrip(lane, piece)
+			state.segmentStrips[#state.segmentStrips + 1] = makeStrip(lane, piece, segmentColors(piece))
+			state.detailStrips[#state.detailStrips + 1] = makeStrip(lane, piece, detailColors(lane, piece))
 		end
 	end
 	return state
@@ -145,14 +155,15 @@ local function Subtitle(text : string) : TreeNodeId
 	return builtin.TextView{ meta = { class = "font-scale-title-4, layer-subtitle" }, text = text }
 end
 
-local function LayerAction(state : LayerState, hoveredRef : ReactRefT<Engine.Entity>) : TreeNodeId
+local function LayerAction(state : LayerState, hoveredRef : ReactRefT<Engine.Entity>, detail : boolean) : TreeNodeId
 	return builtin.ActionDescriptor{
 		tool = ACTION_TOOL,
 		terrainCirclePolicy = app_util.getMouseOrGamepad("Never", "FocusSelection"),
 		crosshair = app_util.getMouseOrGamepad(false, true),
 		children = {
 			builtin.LayerConfig{ config = makeGreyMapConfig() },
-			builtin.EdgeRenderable{ edges = state.strips, ignoreDepth = true },
+			-- Only one EdgeRenderable is allowed per ActionDescriptor, so swap the list.
+			builtin.EdgeRenderable{ edges = detail and state.detailStrips or state.segmentStrips, ignoreDepth = true },
 			selector_react_util.makeDefaultSelector(game_react_globals.getDefaultRendererComponent(), hoveredRef, true, nil, true),
 			builtin.ActionTooltip{
 				recipe = gradient_tooltip.Tooltip,
@@ -168,9 +179,11 @@ local LayerContent = react.RegisterRecipe("NullDozzerGradientsContent", function
 		stateRef:set(buildLayerState())
 	end
 	local hoveredRef : ReactRefT<Engine.Entity> = react.useRef(-1)
+	local detailState = engine_react_util.useStepState(gradient_tooltip.isDetailHeld)
+	local detail = detailState:old() == true
 
 	payload.setActionFn(function() : TreeNodeId
-		return LayerAction(stateRef:get(), hoveredRef)
+		return LayerAction(stateRef:get(), hoveredRef, detail)
 	end)
 
 	return builtin.BoxLayout{
@@ -183,7 +196,7 @@ local LayerContent = react.RegisterRecipe("NullDozzerGradientsContent", function
 						Legend("track"),
 						Subtitle("Road gradient"),
 						Legend("road"),
-						builtin.TextView{ text = "Hold Shift over a bridge or tunnel to list its segments." },
+						builtin.TextView{ text = "Colours show each segment's average.\nHold Shift to see the gradient every 4 m." },
 					},
 				},
 			},

@@ -7,7 +7,8 @@ local gradient_tooltip : NullDozzerGradientTooltip = {}
 local type Piece = NullDozzerNetworkScan.Piece
 
 local MAX_DISTANCE_TO_NETWORK <const> = 6.0
-local LIST_SEGMENTS_ACTION <const> = "IA_PRECISION_MODE"
+-- Shift by default; the same modifier the build tools use for precision mode.
+local DETAIL_ACTION <const> = "IA_PRECISION_MODE"
 
 local STRUCTURE_NAMES : {NullDozzerNetworkScan.Structure : string} = {
 	bridge = "Bridge",
@@ -19,9 +20,13 @@ local function percent(gradient : number) : string
 	return api.util.toStringPercentPrecision(gradient, 1)
 end
 
-local function isListSegmentsHeld() : boolean
-	local ok, held = pcall(api.gui.inputAction.modifierOnlyActionIsActive, LIST_SEGMENTS_ACTION)
+function gradient_tooltip.isDetailHeld() : boolean
+	local ok, held = pcall(api.gui.inputAction.modifierOnlyActionIsActive, DETAIL_ACTION)
 	return ok and held == true
+end
+
+local function summary(label : string, average : number, steepest : number) : string
+	return label .. ": " .. percent(average) .. " average\nSteepest: " .. percent(steepest)
 end
 
 local function piecesOfStructure(structureEntity : Engine.Entity, pieces : {Engine.Entity : Piece}) : {Piece}
@@ -46,44 +51,61 @@ local function piecesOfStructure(structureEntity : Engine.Entity, pieces : {Engi
 	return result
 end
 
-local function describeStructure(structurePieces : {Piece}, listSegments : boolean) : string
-	local steepest = 0.0
+-- Length-weighted mean of the segment averages, so a bridge that climbs and then
+-- falls still reads as steep instead of cancelling out.
+local function describeStructure(structurePieces : {Piece}) : string
+	local weighted, length, steepest = 0.0, 0.0, 0.0
 	for _, piece in ipairs(structurePieces) do
+		weighted = weighted + piece.profile.averageGradient * piece.profile.horizontalLength
+		length = length + piece.profile.horizontalLength
 		steepest = math.max(steepest, piece.profile.maxGradient)
 	end
-	local lines = { STRUCTURE_NAMES[structurePieces[1].structure] .. " max: " .. percent(steepest) }
-	if listSegments then
-		for i, piece in ipairs(structurePieces) do
-			lines[#lines + 1] = "Segment " .. i .. ": " .. percent(piece.profile.maxGradient)
-		end
+	local average = length > 0.0 and weighted / length or 0.0
+	return summary(STRUCTURE_NAMES[structurePieces[1].structure], average, steepest)
+end
+
+local function describeStructureSegments(structurePieces : {Piece}) : string
+	local lines : {string} = {}
+	for i, piece in ipairs(structurePieces) do
+		lines[#lines + 1] = "Segment " .. i .. ": " .. percent(piece.profile.averageGradient)
+			.. " average, " .. percent(piece.profile.maxGradient) .. " steepest"
 	end
 	return table.concat(lines, "\n")
 end
 
-local function describePoint(point : NullDozzerPointGrid.Point, pieces : {Engine.Entity : Piece}) : string
-	return "Gradient: " .. percent(point.gradient) .. "\nSegment max: " .. percent(pieces[point.piece].profile.maxGradient)
+local function describePoint(point : NullDozzerPointGrid.Point, pieces : {Engine.Entity : Piece}, detail : boolean) : string
+	if detail then
+		return "Gradient here: " .. percent(point.gradient)
+	end
+	local profile = pieces[point.piece].profile
+	return summary("Segment", profile.averageGradient, profile.maxGradient)
 end
 
-local function describeHoveredStructure(param : NullDozzerGradientTooltip.Param) : string
+local function describeHoveredStructure(param : NullDozzerGradientTooltip.Param, detail : boolean) : string
 	local hovered = param.hoveredRef:get()
 	if hovered == nil or hovered < 0 then
 		return nil
 	end
 	local structurePieces = piecesOfStructure(hovered, param.pieces)
-	return structurePieces and describeStructure(structurePieces, isListSegmentsHeld())
+	if structurePieces == nil then
+		return nil
+	end
+	return detail and describeStructureSegments(structurePieces) or describeStructure(structurePieces)
 end
 
-local function describePointUnderMouse(param : NullDozzerGradientTooltip.Param) : string
+local function describePointUnderMouse(param : NullDozzerGradientTooltip.Param, detail : boolean) : string
 	if not api.gui.mouse.hasTerrainPosition() then
 		return nil
 	end
 	local ground = api.gui.mouse.getTerrainPosition()
 	local point = point_grid.nearest(param.grid, ground.x, ground.y, MAX_DISTANCE_TO_NETWORK)
-	return point and describePoint(point, param.pieces)
+	return point and describePoint(point, param.pieces, detail)
 end
 
+-- Shift raises the resolution one step: structure -> its segments, segment -> point.
 local function tooltipText(param : NullDozzerGradientTooltip.Param) : string
-	return describeHoveredStructure(param) or describePointUnderMouse(param)
+	local detail = gradient_tooltip.isDetailHeld()
+	return describeHoveredStructure(param, detail) or describePointUnderMouse(param, detail)
 end
 
 local function TooltipBox(text : string) : TreeNodeId

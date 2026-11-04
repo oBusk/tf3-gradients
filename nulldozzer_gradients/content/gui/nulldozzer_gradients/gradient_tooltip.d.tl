@@ -6,4 +6,6 @@ global record NullDozzerGradientTooltip
 	end
 
 	Tooltip : Recipe<Param>
+	--- True while the detail modifier (Shift by default) is held.
+	isDetailHeld : function() : boolean
 end
