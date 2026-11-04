@@ -7,6 +7,7 @@ return {
 	include_dir = {
 		tf3 .. "api/tealdef",
 		tf3 .. "base/tealdef",
+		"nulldozzer_gradients/content/gui/nulldozzer_gradients",
 	},
 	global_env_def = "all_def",
 }
